@@ -6,6 +6,8 @@
 
 # ROCm Dual-GPU Setup — Method & Tool Kit
 
+> **Languages / 语言 / 言語 / 언어**: [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [한국어](README.ko-KR.md)
+
 **Copyright 2026 cubecloud Limited (https://cubecloud.io)** · Licensed under [Apache License 2.0](LICENSE)
 
 This kit reproduces the **Option 2** dual-GPU pattern that works on:
