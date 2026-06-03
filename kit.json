@@ -1,0 +1,50 @@
+{
+  "kit_name": "rocm-dual-gpu-kit",
+  "kit_version": "1.0.0",
+  "developed_on": "2026-06-03",
+  "copyright": "Copyright 2026 cubecloud Limited (https://cubecloud.io)",
+  "license": "Apache-2.0",
+  "spdx_license_id": "Apache-2.0",
+  "developed_for": {
+    "os": "Windows 11",
+    "python": "3.12.10",
+    "amd_driver": "Adrenalin 32.0.31019.2002",
+    "hip_sdk": "7.1.0 (7.1.51803-d3a86bd04)",
+    "therock": "7.13.0",
+    "vs": "Visual Studio 2022 BuildTools (MSVC 14.44.35207, Windows SDK 10.0.26100)"
+  },
+  "verified_hardware": [
+    {
+      "igpu": "AMD Radeon 8060S Graphics (Strix Halo, gfx1151)",
+      "dgpu": "AMD Radeon RX 7900 XTX (gfx1100)"
+    }
+  ],
+  "expected_to_work_for": [
+    "iGPU: gfx1151 (Strix Halo), gfx1103 (Phoenix/Rembrandt), gfx1035 (Van Gogh)",
+    "dGPU: gfx1100/1101/1102 (RDNA 3, Navi 3x), gfx1200/1201 (RDNA 4) -- check HIP SDK version"
+  ],
+  "entry_points": {
+    "detect":   "detect-hardware.ps1",
+    "install":  "install-igpu-venv.ps1",
+    "rewire":   "rewire-igpu.ps1",
+    "use_dgpu": "activate-dgpu.ps1 / deactivate-dgpu.ps1",
+    "build":    "dgpu-build-template.ps1",
+    "validate": "validate.ps1",
+    "rollback": "rollback-rewire.ps1"
+  },
+  "documentation": "README.md",
+  "trademarks": {
+    "owner": "cubecloud Limited",
+    "trademarks": ["cubecloud", "cubecloud.io"],
+    "third_party_trademarks_used_in_docs_only": [
+      "AMD", "Radeon", "ROCm", "HIP", "Adrenalin", "Strix Halo", "RDNA"
+    ],
+    "disclaimer": "This kit is not affiliated with, endorsed by, or sponsored by Advanced Micro Devices, Inc."
+  },
+  "third_party_dependencies": [
+    {"name": "AMD ROCm / TheRock",  "license": "Apache-2.0", "url": "https://github.com/ROCm/TheRock"},
+    {"name": "AMD HIP SDK",          "license": "MIT",       "url": "https://www.amd.com/en/developer/rocm-hub.html"},
+    {"name": "Python 3.12",          "license": "PSF",       "url": "https://www.python.org"},
+    {"name": "Visual Studio BuildTools", "license": "MS-EULA", "url": "https://visualstudio.microsoft.com"}
+  ]
+}
