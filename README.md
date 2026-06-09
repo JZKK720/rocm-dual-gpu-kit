@@ -177,6 +177,9 @@ C:\therock\rocm-dual-gpu-kit\
 ├── dgpu-build-template.ps1    <- Phase 4: clone & customize for your dGPU
 ├── detect-hardware.ps1        <- detect iGPU/dGPU + their gcnArchName + HIP SDK presence
 └── validate.ps1               <- Phase 5: end-to-end smoke test
+└── diagnose-connection.ps1    <- Phase 5.5: read-only transport diagnostic (auto-invoked by validate.ps1 on dGPU failure)
+└── dgpu-probe.ps1             <- optional: finer-grained PnP probe
+
 ```
 
 ## License & Copyright

@@ -54,8 +54,15 @@ User wants dual-GPU ROCm setup
     │
     ├── 6. Run validate.ps1 — end-to-end smoke test.
     │      Expected: iGPU rocm-sdk test 26/26 (1 Linux-only skip), dGPU vector_add PASS.
+    │      If dGPU side fails, validate.ps1 auto-invokes diagnose-connection.ps1 and prints a
+    │      per-layer verdict (form factor, USB4/TB4 topology, PCIe, AMD driver, HIP runtime, venv).
     │
-    └── 7. If anything fails, see [README.md "Known issues" section](README.md).
+    ├── 7. Run diagnose-connection.ps1 on demand — same verdict table, no driver / firmware change.
+    │      Use this when the dGPU or USB4 dock is "not recognized", or to scan a new machine
+    │      before committing to the install. Read-only: it never mutates registry, drivers, or env.
+    │      Suggested next block in the output points to the most relevant kit command.
+    │
+    └── 8. If anything fails, see [README.md "Known issues" section](README.md).
 ```
 
 ## Per-hardware adaptation

@@ -1,7 +1,7 @@
 {
   "kit_name": "rocm-dual-gpu-kit",
-  "kit_version": "1.0.0",
-  "developed_on": "2026-06-03",
+  "kit_version": "1.1.0",
+  "developed_on": "2026-06-09",
   "copyright": "Copyright 2026 cubecloud Limited (https://cubecloud.io)",
   "license": "Apache-2.0",
   "spdx_license_id": "Apache-2.0",
@@ -30,8 +30,31 @@
     "use_dgpu": "activate-dgpu.ps1 / deactivate-dgpu.ps1",
     "build":    "dgpu-build-template.ps1",
     "validate": "validate.ps1",
+    "diagnose": "diagnose-connection.ps1",
     "rollback": "rollback-rewire.ps1"
   },
+  "changelog": [
+    {
+      "version": "1.1.0",
+      "date": "2026-06-09",
+      "additive": true,
+      "highlights": [
+        "New diagnose-connection.ps1: 6-layer read-only transport diagnostic (form factor, USB4/TB4, PCIe, AMD driver, HIP runtime, rocm-smi). Auto-invoked by validate.ps1 on any dGPU failure.",
+        "New dgpu-probe.ps1: finer-grained PnP probe for the dGPU, ASMedia dock routers, USB4 audio, and recent events.",
+        "validate.ps1 now auto-invokes diagnose-connection.ps1 on any dGPU-side failure (hipInfo 0 devices, or vector_add compile/run exception) so the user gets a per-layer verdict without a second command.",
+        "Bug fixes in diagnose-connection.ps1: PCIe layer now correctly reports OK on a single healthy dGPU; USB4 layer distinguishes host-controller failures (FAIL) from downstream-only degradation (WARN); hipInfo Test-Path no longer chokes on null.",
+        "AGENTS.md and SKILL.md updated with the new diagnose entry point and decision-tree step 7."
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-06-03",
+      "additive": false,
+      "highlights": [
+        "Initial verified-hardware release. Strix Halo iGPU (gfx1151) + RX 7900 XTX dGPU (gfx1100) end-to-end: 26/26 rocm-sdk test on iGPU venv, vector_add PASS on dGPU HIP SDK."
+      ]
+    }
+  ],
   "documentation": "README.md",
   "trademarks": {
     "owner": "cubecloud Limited",

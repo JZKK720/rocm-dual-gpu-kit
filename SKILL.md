@@ -6,7 +6,7 @@ metadata:
   author: cubecloud Limited
   homepage: https://cubecloud.io
   repository: https://github.com/JZKK720/rocm-dual-gpu-kit
-  version: "1.0.0"
+  version: "1.1.0"
   applies_to: Windows 11
   python: "3.12.x"
   amd_driver: "Adrenalin 32.0.31019.2002 (or later)"
@@ -21,6 +21,7 @@ This skill walks the user through reproducing the **cubecloud Option 2** dual-GP
 > - `skip-to-step N` — resume from a specific step (1-6)
 > - `validate-only` — skip install, just run the validation
 > - `rollback` — restore the env from the snapshot taken during step 4 (rewire)
+> - `diagnose` — run `diagnose-connection.ps1` (transport / driver / venv verdict)
 
 ## When to use
 

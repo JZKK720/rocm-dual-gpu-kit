@@ -34,6 +34,10 @@ foreach ($c in @('C:\rocm-sdk-dgpu\vector_add.cpp',"$PSScriptRoot\..\rocm-sdk-dg
 if (-not $env:DETECT_IGPU_ARCH) { throw "iGPU not detected - is detect-hardware.ps1 working?" }
 if (-not $env:DETECT_DGPU_ARCH) { throw "dGPU not detected" }
 
+# Track dGPU-side outcome so we can run diagnose-connection.ps1 on failure.
+$dgpuTestOK  = $true
+$dgpuReason  = ''
+
 # 1. iGPU side
 "" | Write-Host
 "=== 1. iGPU venv test ===" | Write-Host
@@ -52,6 +56,11 @@ if ($testOut -match 'Ran 26 tests in [\d.]+s\s*$' -or $testOut -match 'OK \(skip
 if ($env:DETECT_HIP_SDK -and (Test-Path $env:DETECT_HIP_SDK)) {
     "" | Write-Host
     "=== 2. dGPU HIP SDK test ===" | Write-Host
+
+    # Tolerate dGPU-side failures so we can still run diagnose-connection.ps1.
+    $localErrPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+
     . "$PSScriptRoot\activate-dgpu.ps1"
     $ver = (hipconfig --version 2>&1 | Out-String).Trim()
     $rcm = (hipconfig --rocmpath 2>&1 | Out-String).Trim()
@@ -59,17 +68,49 @@ if ($env:DETECT_HIP_SDK -and (Test-Path $env:DETECT_HIP_SDK)) {
     "  hipconfig --rocmpath: $rcm" | Write-Host
     "  --rocmpath matches HIP SDK: $($rcm -like '*AMD\ROCm*')" | Write-Host
 
+    # Capture hipInfo so the diagnostic branch knows whether the dGPU is enumerated.
+    $hipInfoOut = ''
+    $hipInfoExe = Join-Path $hipSdk 'bin\hipInfo.exe'
+    if (Test-Path $hipInfoExe) { $hipInfoOut = & $hipInfoExe 2>&1 | Out-String }
+    $dgpuDeviceMatches = [regex]::Matches($hipInfoOut, '(?ms)device#\s+\d+')
+    if ($hipInfoOut -and $dgpuDeviceMatches.Count -gt 0) {
+        "  hipInfo devices: $($dgpuDeviceMatches.Count)" | Write-Host
+    } else {
+        "  [!] hipInfo reported 0 devices." | Write-Host -ForegroundColor Yellow
+        $dgpuTestOK = $false
+        $dgpuReason = 'hipInfo enumerated 0 devices'
+    }
+
     # 3. End-to-end compile + run, if source is available
+    $compileRan = $false
     if ($SRC) {
         "" | Write-Host
         "=== 3. dGPU end-to-end compile + run (vector_add) ===" | Write-Host
         $arch = $env:DETECT_DGPU_ARCH
-        . "$PSScriptRoot\dgpu-build-template.ps1"
+        try {
+            . "$PSScriptRoot\dgpu-build-template.ps1"
+            $compileRan = $true
+        } catch {
+            $dgpuTestOK = $false
+            $dgpuReason = "dGPU compile/run failed: $($_.Exception.Message)"
+            "  [!] $dgpuReason" | Write-Host -ForegroundColor Yellow
+        }
     } else {
         "  (no vector_add.cpp found; skipping compile test)" | Write-Host -ForegroundColor Yellow
     }
 
-    . "$PSScriptRoot\deactivate-dgpu.ps1"
+    try { . "$PSScriptRoot\deactivate-dgpu.ps1" } catch { }
+
+    $ErrorActionPreference = $localErrPref
+
+    # If the dGPU side failed for any reason, auto-invoke the transport diagnostic
+    # so the user gets a verdict table without running a second command.
+    if (-not $dgpuTestOK) {
+        "" | Write-Host
+        "=== 4. dGPU transport diagnostic (auto) ===" | Write-Host
+        "  reason: $dgpuReason" | Write-Host
+        & "$PSScriptRoot\diagnose-connection.ps1"
+    }
 } else {
     "  [!] HIP SDK not installed; dGPU side skipped." | Write-Host -ForegroundColor Yellow
 }

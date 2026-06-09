@@ -1,0 +1,11 @@
+# =============================================================================
+# rocm-dual-gpu-kit
+# Copyright 2026 cubecloud Limited (https://cubecloud.io)
+# SPDX-License-Identifier: Apache-2.0
+# =============================================================================
+# Runtime artifacts (kept out of git so a fresh clone is clean)
+diagnose-connection.log
+diagnose-connection.detour.log
+dgpu-probe.log
+validate.log
+detect.env
