@@ -6,7 +6,7 @@ metadata:
   author: cubecloud Limited
   homepage: https://cubecloud.io
   repository: https://github.com/JZKK720/rocm-dual-gpu-kit
-  version: "1.1.0"
+  version: "1.2.0"
   applies_to: Windows 11
   python: "3.12.x"
   amd_driver: "Adrenalin 32.0.31019.2002 (or later)"
@@ -167,6 +167,43 @@ If anything fails, the `Known issues` section in README.md covers:
 - [LICENSE](LICENSE) — Apache 2.0 full text
 - [NOTICE](NOTICE) — copyright + attribution
 - [kit.json](kit.json) — machine-readable metadata
+
+## Ollama dual-GPU acceleration (v1.2.0)
+
+### Step 7 — Test non-peers VRAM constraint
+
+Run `test-peer-vram.ps1`. It compiles `peer_vram_test.cpp` for the dGPU arch and runs it with `HIP_VISIBLE_DEVICES=0,1`. Expected output:
+
+```
+hipDeviceCanAccessPeer(0->1): 0
+hipDeviceCanAccessPeer(1->0): 0
+hipDeviceEnablePeerAccess(1,0): err=101
+hipMemcpyPeer(d0<-d1): err=0 (no error)
+PEER COPY: PASS (transparent host staging by HIP runtime)
+STAGING COPY: PASS
+```
+
+This proves: direct peer access is not supported (non-peers), but `hipMemcpyPeer` transparently falls back to host-memory staging and the data round-trips correctly.
+
+### Step 8 — Configure Ollama for dual-GPU dual-model operation
+
+Run `configure-ollama-dual-gpu.ps1`. It sets user-level env vars and gracefully restarts the Ollama tray app:
+
+- `OLLAMA_MAX_LOADED_MODELS=2` — two models in VRAM simultaneously
+- `OLLAMA_IGPU_ENABLE=1` — enable the iGPU (87 GB VRAM)
+- `HIP_VISIBLE_DEVICES=0,1` — both GPUs visible
+
+After running it, load two models in separate terminals:
+- Large model (e.g., `gemma4:26b-a4b-it-q8_0`, ~28 GB) → lands on iGPU (87 GB)
+- Small model (e.g., `gemma4:12b-it-q8_0`, ~12 GB) → lands on dGPU (24 GB)
+
+Concurrent requests to different models run in parallel on different GPUs.
+
+Revert: `.\configure-ollama-dual-gpu.ps1 -Revert`
+
+### Known limitation: single-model cross-GPU split
+
+Ollama's scheduler is architecturally single-GPU-per-model. `LLAMA_ARG_SPLIT_MODE=layer` env var is inherited but doesn't work because the runner doesn't pass `--device 0,1`. The bundled `llama-server.exe` has no GPU support compiled in. See AGENTS.md "Ollama dual-GPU acceleration" section for details.
 
 ## Recovery
 

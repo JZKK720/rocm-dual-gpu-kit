@@ -1,6 +1,6 @@
 {
   "kit_name": "rocm-dual-gpu-kit",
-  "kit_version": "1.1.0",
+  "kit_version": "1.2.0",
   "developed_on": "2026-06-09",
   "copyright": "Copyright 2026 cubecloud Limited (https://cubecloud.io)",
   "license": "Apache-2.0",
@@ -31,9 +31,25 @@
     "build":    "dgpu-build-template.ps1",
     "validate": "validate.ps1",
     "diagnose": "diagnose-connection.ps1",
-    "rollback": "rollback-rewire.ps1"
+    "rollback": "rollback-rewire.ps1",
+    "test_peer_vram": "test-peer-vram.ps1",
+    "configure_ollama_dual_gpu": "configure-ollama-dual-gpu.ps1",
+    "start_split_model": "start-split-model.ps1"
   },
   "changelog": [
+    {
+      "version": "1.2.0",
+      "date": "2026-06-29",
+      "additive": true,
+      "highlights": [
+        "New peer_vram_test.cpp + test-peer-vram.ps1: HIP C++ test that reproduces the non-peers VRAM copy constraint and verifies the host-memory staging workaround. Proves hipMemcpyPeer transparently falls back to host staging on non-peers.",
+        "New configure-ollama-dual-gpu.ps1: sets user-level env vars (OLLAMA_MAX_LOADED_MODELS=2, OLLAMA_IGPU_ENABLE=1, HIP_VISIBLE_DEVICES=0,1) and gracefully restarts the Ollama tray app. Enables two models loaded simultaneously on different GPUs (iGPU + dGPU) for parallel inference throughput.",
+        "New start-split-model.ps1: attempts forced layer split via llama-server --split-mode layer (documented as limited by Ollama's bundled binary having no GPU support compiled in).",
+        "New start-dual-gpu-ollama.ps1: standalone Ollama server launcher with dual-GPU env vars (superseded by configure-ollama-dual-gpu.ps1).",
+        "AGENTS.md updated with disk reclaim guidance section.",
+        "Verified findings: Ollama scheduler is architecturally single-GPU-per-model (NO_PEER_COPY=1); LLAMA_ARG_SPLIT_MODE/DEVICE/TENSOR_SPLIT env vars are inherited but don't work because the runner doesn't pass --device 0,1. Best path: use iGPU (87 GB) as primary, dGPU (24 GB) for second concurrent model."
+      ]
+    },
     {
       "version": "1.1.0",
       "date": "2026-06-09",

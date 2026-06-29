@@ -85,6 +85,18 @@ If the user's hardware differs from the verified Strix Halo + RX 7900 XTX, edit 
 
 If the user has < 30 GB free on C:, warn them before installing.
 
+## Disk reclaim guidance
+
+Use a read-first triage for any "free space on C:\" request. The kit itself is not a cleanup tool, so separate disposable artifacts from runtime dependencies before suggesting deletions.
+
+- Safest large reclaim target: `C:\rocm-sdk\cache` after a successful install, if the user does not need an offline reinstall cache.
+- Usually safe: generated test outputs or logs under `C:\rocm-sdk-dgpu\`, plus repo-local diagnostic logs such as `validate.log`, `diagnose-connection.log`, and `dgpu-probe.log`.
+- Keep by default: `C:\rocm-sdk\.venv` and `C:\Program Files\AMD\ROCm\...` unless the user explicitly wants to uninstall or rebuild the setup.
+- Keep until rollback is no longer needed: `C:\rocm-sdk\env-backup.xml` and `C:\rocm-sdk\env-backup-machine.xml`.
+- After removing `C:\rocm-sdk\.venv`, clear the dangling user-scope `HIP_PATH` and `LLVM_PATH` env vars so they don't point at a deleted path.
+- Always measure size first, then report candidate path, estimated savings, and risk level before deleting anything.
+- For whole-drive Windows cleanup beyond the kit, also consider: `C:\hiberfil.sys` (disable hibernation), `C:\pagefile.sys` (shrink after reboot), `C:\Windows\WinSxS` (`dism /Online /Cleanup-Image /StartComponentCleanup`), user-profile browser/VS Code caches, and `C:\Windows\Logs`.
+
 ## When NOT to use this kit
 
 - macOS or Linux (kit is Windows-specific)
@@ -107,6 +119,58 @@ After running the kit:
 4. `hipconfig --version` and `hipconfig --rocmpath` after `activate-dgpu.ps1` (should report HIP SDK 7.x)
 5. Disk free before and after (the kit doesn't reclaim disk; it consumes ~25 GB)
 6. Any deviations from the README (e.g. "I had to use gfx12-generic because gfx1151 doesn't have wheels yet")
+
+## Ollama dual-GPU acceleration (v1.2.0)
+
+The kit now includes tools to accelerate local LLM inference using both GPUs simultaneously.
+
+### Non-peers VRAM constraint (verified)
+
+`hipInfo` reports both devices as `non-peers` on Strix Halo + RX 7900 XTX:
+- `hipDeviceCanAccessPeer(0→1)`: 0 (no direct peer access)
+- `hipDeviceCanAccessPeer(1→0)`: 0 (no direct peer access)
+- `hipDeviceEnablePeerAccess`: fails with err=101
+- `hipMemcpyPeer`: **works** — HIP SDK 7.1.0 transparently falls back to host-memory staging
+
+Run `test-peer-vram.ps1` to verify on any box. Expected: `PEER COPY: PASS (transparent host staging)` and `STAGING COPY: PASS`.
+
+### Ollama scheduler behavior (verified)
+
+Ollama's scheduler is **architecturally single-GPU-per-model**:
+- `NO_PEER_COPY=1` is set by llama.cpp when non-peers are detected
+- The scheduler picks one GPU per model load (`sched.go:1024 "selecting single GPU"`)
+- When a model exceeds one GPU's VRAM, it overflows to **system RAM (CPU)**, not the other GPU
+- `LLAMA_ARG_SPLIT_MODE=layer` env var is inherited by llama-server but doesn't work because the runner doesn't pass `--device 0,1`
+- `LLAMA_ARG_DEVICE=0,1` env var crashes: `invalid device: 0` (bundled llama-server has no GPU support compiled in)
+
+### Working: two models, two GPUs (Option 1)
+
+`configure-ollama-dual-gpu.ps1` sets user-level env vars and restarts the Ollama tray app:
+- `OLLAMA_MAX_LOADED_MODELS=2` — allow 2 models in VRAM simultaneously
+- `OLLAMA_IGPU_ENABLE=1` — enable the iGPU (87 GB VRAM)
+- `HIP_VISIBLE_DEVICES=0,1` — both GPUs visible
+
+After running it, load two models:
+- Large model (e.g., gemma4:26b, ~28 GB) → lands on iGPU (87 GB)
+- Small model (e.g., gemma4:12b, ~12 GB) → lands on dGPU (24 GB)
+
+Concurrent requests to different models run in parallel on different GPUs.
+
+Revert: `.\configure-ollama-dual-gpu.ps1 -Revert`
+
+### Not working: forced layer split (Option 2)
+
+`start-split-model.ps1` attempts `--split-mode layer --tensor-split 0.78,0.22` via the bundled llama-server, but Ollama's `llama-server.exe` is compiled without GPU support. The actual GPU offload happens through Ollama's runner which dynamically loads `ggml-hip.dll`. The standalone binary cannot use `--split-mode` or `--tensor-split` with GPU.
+
+### Recommendation
+
+| Workload | Best approach |
+|---|---|
+| Single large model (≤ 87 GB) | Use iGPU alone (87 GB VRAM fits most models) |
+| Multiple users / models | Option 1: two models, two GPUs (`configure-ollama-dual-gpu.ps1`) |
+| Model too large for iGPU alone | Reduce context size or use Q4 quantization |
+
+**Do not reduce iGPU VRAM to add more system RAM.** The iGPU's 87 GB unified memory is the single biggest advantage of this box. CPU overflow is 10-50x slower than GPU. The NPU (XDNA) is not used by Ollama/llama.cpp.
 
 ## Related skills
 
