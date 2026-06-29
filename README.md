@@ -145,6 +145,7 @@ $env:HIP_VISIBLE_DEVICES = '1'; hipInfo                      # dGPU only
 
 | Hardware | What to change | What stays the same |
 |---|---|---|
+| **Strix Halo (Ryzen AI MAX 395) iGPU (gfx1151)** | No changes needed — this kit was developed and verified on this hardware | Phases 1-5 all apply |
 | **Strix Point (HX 370/470) iGPU (gfx1155)** | TheRock index: `gfx1151` (try) or `gfx12-generic` (if available); `-libraries-gfx1151` may be needed | Phases 1-5 same |
 | **Rembrandt / Phoenix (gfx1103) iGPU** | TheRock index: `gfx110X-all`; `-libraries-gfx110x-all` | Phases 1-5 same |
 | **RX 7600 XT (gfx1100) dGPU** | `--offload-arch=gfx1100`; HIP SDK 7.1.0 already supports it | Phase 4 only |

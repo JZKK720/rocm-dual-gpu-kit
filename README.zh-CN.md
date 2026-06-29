@@ -143,6 +143,7 @@ $env:HIP_VISIBLE_DEVICES = '1'; hipInfo                      # 仅 dGPU
 
 | 硬件 | 需要修改什么 | 保持不变 |
 |---|---|---|
+| **Strix Halo（Ryzen AI MAX 395）iGPU（gfx1151）** | 无需修改 — 本工具包在此硬件上验证开发 | 阶段 1–5 全部适用 |
 | **Strix Point（HX 370/470）iGPU（gfx1155）** | TheRock 索引：`gfx1151`（尝试）或 `gfx12-generic`（如可用）；可能需要 `-libraries-gfx1151` | 阶段 1–5 保持不变 |
 | **Rembrandt / Phoenix（gfx1103）iGPU** | TheRock 索引：`gfx110X-all`；`-libraries-gfx110x-all` | 阶段 1–5 保持不变 |
 | **RX 7600 XT（gfx1100）dGPU** | `--offload-arch=gfx1100`；HIP SDK 7.1.0 已支持 | 仅阶段 4 |
@@ -208,14 +209,7 @@ Ollama 的调度器在架构上是**单 GPU 每模型**：
 
 ### 性能瓶颈层级图
 
-```mermaid
-graph TD
-    A["模型需要 40 GB"] --> B{"能放入 iGPU 88 GB?"}
-    B -->|"是 — 当前配置"| C["⚡ 全 GPU 速度<br/>~50-100 tok/s"]
-    B -->|"否 — 32 GB iGPU"| D{"能放入 dGPU 24 GB?"}
-    D -->|"否"| E["🐢 CPU 溢出<br/>~2-5 tok/s"]
-    D -->|"是 — 仅小模型"| F["⚡ dGPU 速度<br/>但限于 24 GB 模型"]
-```
+![性能瓶颈层级图](diagram.png)
 
 | 层级 | 带宽 | 角色 |
 |---|---|---|
