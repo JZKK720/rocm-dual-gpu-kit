@@ -160,24 +160,106 @@ $env:HIP_VISIBLE_DEVICES = '1'; hipInfo                      # 仅 dGPU
 - **HIP_PATH 覆盖**：HIP SDK 7.1.0 的 `hipconfig` 从环境读 `HIP_PATH`。如果 iGPU 虚拟环境设置了 `HIP_PATH`，HIP SDK 的 `hipconfig` 会报告 iGPU 虚拟环境的路径。激活脚本必须清空 `HIP_PATH` 并设为 HIP SDK 目录。
 - **路径含空格的 `hipcc.bat` 不工作**（它按空格分词）。直接调用 `clang.exe`，使用 `--driver-mode=g++ --hip-link`。
 
+## Ollama 双 GPU 加速（v1.2.0）
+
+本工具包现在包含利用两块 GPU 同时加速本地 LLM 推理的工具。
+
+### Non-peers VRAM 测试
+
+运行 `test-peer-vram.ps1` 验证 non-peers 约束和主机内存中转方案：
+
+```
+hipDeviceCanAccessPeer(0->1): 0        ← 无直接 peer 访问
+hipDeviceCanAccessPeer(1->0): 0        ← 无直接 peer 访问
+hipDeviceEnablePeerAccess(1,0): err=101  ← peer 启用失败
+hipMemcpyPeer(d0<-d1): err=0 (no error)  ← 但拷贝成功
+PEER COPY: PASS (transparent host staging by HIP runtime)
+STAGING COPY: PASS
+```
+
+**发现**：iGPU 和 dGPU **可以**在彼此之间拷贝 VRAM — 只是不能通过直接 peer-to-peer。HIP SDK 7.1.0 的 `hipMemcpyPeer` 在 peer 访问不可用时透明回退到主机内存中转，数据正确往返。
+
+### Ollama 调度器行为
+
+Ollama 的调度器在架构上是**单 GPU 每模型**：
+
+| 行为 | 详情 |
+|---|---|
+| `NO_PEER_COPY=1` | llama.cpp 检测到 non-peers 时设置 |
+| GPU 选择 | 调度器为每个模型加载选择一块 GPU（`sched.go:1024`） |
+| 溢出 | 当模型超过一块 GPU 的 VRAM 时，溢出到**系统内存（CPU）**，而非另一块 GPU |
+| `LLAMA_ARG_SPLIT_MODE=layer` | 被 llama-server 继承但无效 — runner 不传递 `--device 0,1` |
+| `LLAMA_ARG_DEVICE=0,1` | 崩溃：`invalid device: 0`（内置二进制未编译 GPU 支持） |
+
+### 可用方案：双模型双 GPU（方案 1）
+
+`configure-ollama-dual-gpu.ps1` 设置用户级环境变量并优雅重启 Ollama 托盘应用：
+
+```powershell
+.\configure-ollama-dual-gpu.ps1          # 应用配置
+.\configure-ollama-dual-gpu.ps1 -Revert  # 恢复默认
+```
+
+运行后，加载两个模型：
+- 大模型（如 `gemma4:26b-a4b-it-q8_0`，约 28 GB）→ 落在 iGPU（87 GB）
+- 小模型（如 `gemma4:12b-it-q8_0`，约 12 GB）→ 落在 dGPU（24 GB）
+
+对不同模型的并发请求在不同 GPU 上并行运行。
+
+### 性能瓶颈层级图
+
+```mermaid
+graph TD
+    A["模型需要 40 GB"] --> B{"能放入 iGPU 88 GB?"}
+    B -->|"是 — 当前配置"| C["⚡ 全 GPU 速度<br/>~50-100 tok/s"]
+    B -->|"否 — 32 GB iGPU"| D{"能放入 dGPU 24 GB?"}
+    D -->|"否"| E["🐢 CPU 溢出<br/>~2-5 tok/s"]
+    D -->|"是 — 仅小模型"| F["⚡ dGPU 速度<br/>但限于 24 GB 模型"]
+```
+
+| 层级 | 带宽 | 角色 |
+|---|---|---|
+| **GPU VRAM**（iGPU 88 GB / dGPU 24 GB） | ~500 GB/s | 并行矩阵运算 — 快 |
+| **系统内存**（64 GB DDR5） | ~90 GB/s | CPU 溢出 — 比 GPU 慢 10-50 倍 |
+| **NPU**（Strix Halo 上的 XDNA） | N/A | Ollama/llama.cpp **不使用** |
+
+### 建议
+
+| 工作负载 | 最佳方案 |
+|---|---|
+| 单个大模型（≤ 87 GB） | 仅用 iGPU（87 GB VRAM 可容纳大多数模型） |
+| 多用户 / 多模型 | 方案 1：双模型双 GPU（`configure-ollama-dual-gpu.ps1`） |
+| 模型对 iGPU 来说太大 | 减小上下文（`OLLAMA_CONTEXT_LENGTH=32768`）或使用 Q4 量化 |
+
+**不要为了增加系统内存而减少 iGPU VRAM。** iGPU 的 87 GB 统一内存是本机最大的优势。CPU 溢出比 GPU 慢 10-50 倍。NPU（XDNA）不被 Ollama/llama.cpp 使用。
+
 ## 工具包文件清单
 
 ```
 C:\therock\rocm-dual-gpu-kit\
-├── README.md                  <- 英文（本文件）
-├── README.zh-CN.md            <- 简体中文（本文件）
-├── README.ja-JP.md            <- 日本語
-├── README.ko-KR.md            <- 한국어
-├── LICENSE                    <- Apache License 2.0（全文）
-├── NOTICE                     <- 版权与归属
-├── kit.json                   <- 工具包元数据
-├── install-igpu-venv.ps1      <- 阶段 1：自动检测 + 安装
-├── rewire-igpu.ps1            <- 阶段 2：机器范围环境（UAC）
-├── activate-dgpu.ps1          <- 阶段 3：HIP SDK 激活
-├── deactivate-dgpu.ps1        <- 阶段 3：恢复
-├── dgpu-build-template.ps1    <- 阶段 4：克隆并按你的 dGPU 定制
-├── detect-hardware.ps1        <- 检测 iGPU/dGPU + 其 gcnArchName + HIP SDK
-└── validate.ps1               <- 阶段 5：端到端冒烟测试
+├── README.md                       <- 英文
+├── README.zh-CN.md                 <- 简体中文（本文件）
+├── README.ja-JP.md                  <- 日本語
+├── README.ko-KR.md                  <- 한국어
+├── LICENSE                         <- Apache License 2.0（全文）
+├── NOTICE                          <- 版权与归属
+├── kit.json                        <- 工具包元数据
+├── AGENTS.md                       <- Agent 快速入门合约
+├── SKILL.md                        <- 结构化技能格式
+├── install-igpu-venv.ps1           <- 阶段 1：自动检测 + 安装
+├── rewire-igpu.ps1                 <- 阶段 2：机器范围环境（UAC）
+├── activate-dgpu.ps1               <- 阶段 3：HIP SDK 激活
+├── deactivate-dgpu.ps1             <- 阶段 3：恢复
+├── dgpu-build-template.ps1         <- 阶段 4：克隆并按你的 dGPU 定制
+├── detect-hardware.ps1             <- 检测 iGPU/dGPU + 其 gcnArchName + HIP SDK
+├── validate.ps1                    <- 阶段 5：端到端冒烟测试
+├── diagnose-connection.ps1         <- 阶段 5.5：只读传输诊断
+├── dgpu-probe.ps1                  <- 可选：更细粒度的 PnP 探测
+├── peer_vram_test.cpp              <- v1.2.0：HIP C++ non-peers VRAM 测试
+├── test-peer-vram.ps1              <- v1.2.0：编译 + 运行 peer_vram_test
+├── configure-ollama-dual-gpu.ps1    <- v1.2.0：Ollama 双 GPU 配置 + 托盘重启
+├── start-dual-gpu-ollama.ps1        <- v1.2.0：独立 Ollama 启动器（已被取代）
+└── start-split-model.ps1           <- v1.2.0：强制层分割尝试（受限）
 ```
 
 ## 许可与版权

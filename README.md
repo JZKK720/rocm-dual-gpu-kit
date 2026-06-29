@@ -162,24 +162,106 @@ $env:HIP_VISIBLE_DEVICES = '1'; hipInfo                      # dGPU only
 - **HIP_PATH shadowing**: HIP SDK 7.1.0's `hipconfig` reads `HIP_PATH` from env. If the iGPU venv sets `HIP_PATH`, HIP SDK's `hipconfig` reports the iGPU venv's paths. The activation script must clear `HIP_PATH` and set it to the HIP SDK dir.
 - **hipcc.bat with paths containing spaces** doesn't work (it tokenizes on spaces). Invoke `clang.exe` directly with `--driver-mode=g++ --hip-link`.
 
+## Ollama dual-GPU acceleration (v1.2.0)
+
+This kit now includes tools to accelerate local LLM inference using both GPUs simultaneously.
+
+### Non-peers VRAM test
+
+Run `test-peer-vram.ps1` to verify the non-peers constraint and the host-memory staging workaround on your box:
+
+```
+hipDeviceCanAccessPeer(0->1): 0        ← no direct peer access
+hipDeviceCanAccessPeer(1->0): 0        ← no direct peer access
+hipDeviceEnablePeerAccess(1,0): err=101  ← peer enable fails
+hipMemcpyPeer(d0<-d1): err=0 (no error)  ← but the copy WORKS
+PEER COPY: PASS (transparent host staging by HIP runtime)
+STAGING COPY: PASS
+```
+
+**Finding**: The iGPU and dGPU **can** copy VRAM between each other — just not via direct peer-to-peer. HIP SDK 7.1.0's `hipMemcpyPeer` transparently falls back to host-memory staging when peer access is unavailable, and the data round-trips correctly.
+
+### Ollama scheduler behavior
+
+Ollama's scheduler is **architecturally single-GPU-per-model**:
+
+| Behavior | Detail |
+|---|---|
+| `NO_PEER_COPY=1` | Set by llama.cpp when non-peers detected |
+| GPU selection | Scheduler picks one GPU per model load (`sched.go:1024`) |
+| Overflow | When a model exceeds one GPU's VRAM, it overflows to **system RAM (CPU)**, not the other GPU |
+| `LLAMA_ARG_SPLIT_MODE=layer` | Inherited by llama-server but doesn't work — runner doesn't pass `--device 0,1` |
+| `LLAMA_ARG_DEVICE=0,1` | Crashes: `invalid device: 0` (bundled binary has no GPU support compiled in) |
+
+### Working: two models, two GPUs (Option 1)
+
+`configure-ollama-dual-gpu.ps1` sets user-level env vars and gracefully restarts the Ollama tray app:
+
+```powershell
+.\configure-ollama-dual-gpu.ps1          # apply config
+.\configure-ollama-dual-gpu.ps1 -Revert  # revert to default
+```
+
+After running it, load two models:
+- Large model (e.g., `gemma4:26b-a4b-it-q8_0`, ~28 GB) → lands on iGPU (87 GB)
+- Small model (e.g., `gemma4:12b-it-q8_0`, ~12 GB) → lands on dGPU (24 GB)
+
+Concurrent requests to different models run in parallel on different GPUs.
+
+### Performance bottleneck hierarchy
+
+```mermaid
+graph TD
+    A["Model needs 40 GB"] --> B{"Fits in iGPU 88 GB?"}
+    B -->|"Yes — current setup"| C["⚡ Full GPU speed<br/>~50-100 tok/s"]
+    B -->|"No — 32 GB iGPU"| D{"Fits in dGPU 24 GB?"}
+    D -->|"No"| E["🐢 CPU overflow<br/>~2-5 tok/s"]
+    D -->|"Yes — small models only"| F["⚡ dGPU speed<br/>but limited to 24 GB models"]
+```
+
+| Layer | Bandwidth | Role |
+|---|---|---|
+| **GPU VRAM** (iGPU 88 GB / dGPU 24 GB) | ~500 GB/s | Matrix math in parallel — fast |
+| **System RAM** (64 GB DDR5) | ~90 GB/s | CPU overflow — 10-50x slower than GPU |
+| **NPU** (XDNA on Strix Halo) | N/A | **Not used** by Ollama/llama.cpp |
+
+### Recommendation
+
+| Workload | Best approach |
+|---|---|
+| Single large model (≤ 87 GB) | Use iGPU alone (87 GB VRAM fits most models) |
+| Multiple users / models | Option 1: two models, two GPUs (`configure-ollama-dual-gpu.ps1`) |
+| Model too large for iGPU alone | Reduce context size (`OLLAMA_CONTEXT_LENGTH=32768`) or use Q4 quantization |
+
+**Do not reduce iGPU VRAM to add more system RAM.** The iGPU's 87 GB unified memory is the single biggest advantage of this box. CPU overflow is 10-50x slower than GPU. The NPU (XDNA) is not used by Ollama/llama.cpp.
+
 ## Files in this kit
 
 ```
 C:\therock\rocm-dual-gpu-kit\
-├── README.md                  <- this file
-├── LICENSE                    <- Apache License 2.0 (full text)
-├── NOTICE                     <- copyright + attribution
-├── kit.json                   <- kit metadata
-├── install-igpu-venv.ps1      <- Phase 1: auto-detect + install
-├── rewire-igpu.ps1            <- Phase 2: machine-scope env (UAC)
-├── activate-dgpu.ps1          <- Phase 3: HIP SDK activation
-├── deactivate-dgpu.ps1        <- Phase 3: restore
-├── dgpu-build-template.ps1    <- Phase 4: clone & customize for your dGPU
-├── detect-hardware.ps1        <- detect iGPU/dGPU + their gcnArchName + HIP SDK presence
-└── validate.ps1               <- Phase 5: end-to-end smoke test
-└── diagnose-connection.ps1    <- Phase 5.5: read-only transport diagnostic (auto-invoked by validate.ps1 on dGPU failure)
-└── dgpu-probe.ps1             <- optional: finer-grained PnP probe
-
+├── README.md                       <- this file (English)
+├── README.zh-CN.md                 <- 简体中文
+├── README.ja-JP.md                 <- 日本語
+├── README.ko-KR.md                 <- 한국어
+├── LICENSE                         <- Apache License 2.0 (full text)
+├── NOTICE                          <- copyright + attribution
+├── kit.json                        <- kit metadata
+├── AGENTS.md                       <- agent quick-start contract
+├── SKILL.md                        <- structured skill format
+├── install-igpu-venv.ps1            <- Phase 1: auto-detect + install
+├── rewire-igpu.ps1                 <- Phase 2: machine-scope env (UAC)
+├── activate-dgpu.ps1               <- Phase 3: HIP SDK activation
+├── deactivate-dgpu.ps1             <- Phase 3: restore
+├── dgpu-build-template.ps1         <- Phase 4: clone & customize for your dGPU
+├── detect-hardware.ps1             <- detect iGPU/dGPU + their gcnArchName + HIP SDK presence
+├── validate.ps1                    <- Phase 5: end-to-end smoke test
+├── diagnose-connection.ps1         <- Phase 5.5: read-only transport diagnostic
+├── dgpu-probe.ps1                  <- optional: finer-grained PnP probe
+├── peer_vram_test.cpp              <- v1.2.0: HIP C++ non-peers VRAM test
+├── test-peer-vram.ps1              <- v1.2.0: compile + run peer_vram_test
+├── configure-ollama-dual-gpu.ps1   <- v1.2.0: Ollama dual-GPU config + tray restart
+├── start-dual-gpu-ollama.ps1       <- v1.2.0: standalone Ollama launcher (superseded)
+└── start-split-model.ps1           <- v1.2.0: forced layer split attempt (limited)
 ```
 
 ## License & Copyright
