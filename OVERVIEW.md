@@ -82,8 +82,14 @@ graph TD
 | What | Why |
 |---|---|
 | Splitting one model across both GPUs | The GPUs can't directly share memory (non-peers); forcing it would be 10-50x slower |
-| Using the NPU for AI inference | The NPU (XDNA accelerator) is not supported by Ollama or llama.cpp |
-| Reducing iGPU memory to add more system RAM | Would force large models into slow CPU mode — a major downgrade |
+
+## About the NPU
+
+This solution is not limited to Ollama — it also works with **LM Studio** and **Lemonade Server**, both of which support the NPU (XDNA accelerator). The NPU can offload part of the AI inference workload, complementing the GPUs.
+
+## Why add a dGPU?
+
+The purpose of adding a dGPU is not to reduce iGPU memory, but to **share the heavy workload with the iGPU**. When the iGPU is processing a large model, the dGPU can simultaneously run another model or handle other inference tasks, **accelerating overall model inference throughput**. Each GPU handles its own tasks, working together for higher total performance.
 
 ## Who is this for?
 
