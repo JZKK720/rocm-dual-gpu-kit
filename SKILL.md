@@ -205,6 +205,23 @@ Revert: `.\configure-ollama-dual-gpu.ps1 -Revert`
 
 Ollama's scheduler is architecturally single-GPU-per-model. `LLAMA_ARG_SPLIT_MODE=layer` env var is inherited but doesn't work because the runner doesn't pass `--device 0,1`. The bundled `llama-server.exe` has no GPU support compiled in. See AGENTS.md "Ollama dual-GPU acceleration" section for details.
 
+## NPU acceleration via Lemonade (v1.3.0)
+
+### Step 9 — Bring up the XDNA2 NPU (optional)
+
+Run `install-npu-lemonade.ps1`. It detects the NPU (`PCI\VEN_1022&DEV_17F0`) and driver (needs ≥ 32.0.203.280), silently installs Lemonade Server (per-user MSI), installs the FastFlowLM backend (`flm:npu`), runs `flm validate`, and verifies the server reports `amd_npu: available, family XDNA2` on `http://127.0.0.1:13305`.
+
+Optional first model: `.\install-npu-lemonade.ps1 -Model qwen3-0.6b-FLM` (~0.66 GB, NPU-quantized q4nx).
+
+### Step 10 — Benchmark the NPU
+
+Run `validate-npu.ps1`. It sends chat completions to the running server and parses the FastFlowLM usage block. Verified on Strix Halo (2026-09-30): `qwen3-0.6b-FLM` → **~85 tok/s decode, ~0.48 s TTFT**. Exit 0 when decode ≥ 10 tok/s.
+
+Key facts (verified on Lemonade 2026.39.1 + FLM 1.0.5):
+- Ollama/llama.cpp cannot use the NPU (no NPU backend in its runner); Lemonade is the NPU path.
+- NPU exclusivity: `flm` holds 1 LLM + 1 ASR + 1 embedding max; `ryzenai-llm` holds 1 LLM; the backends evict each other.
+- No single-model NPU+GPU layer split exists (architectural, same reason as the Ollama split limit).
+
 ## Recovery
 
 If anything goes wrong, the kit ships with `rollback-rewire.ps1` (restores the env from the snapshot at `C:\rocm-sdk\env-backup.xml` and `env-backup-machine.xml`).

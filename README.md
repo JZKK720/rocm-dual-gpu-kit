@@ -224,15 +224,50 @@ graph TD
 |---|---|---|
 | **GPU VRAM** (iGPU 88 GB / dGPU 24 GB) | ~500 GB/s | Matrix math in parallel — fast |
 | **System RAM** (64 GB DDR5) | ~90 GB/s | CPU overflow — 10-50x slower than GPU |
-| **NPU** (XDNA on Strix Halo) | N/A | **Not used** by Ollama/llama.cpp |
+| **NPU** (XDNA2 on Strix Halo) | ~10-100 GB/s | **Third accelerator** via Lemonade + FastFlowLM (v1.3.0) — not used by Ollama/llama.cpp |
 
-### Recommendation
+## NPU acceleration via Lemonade (v1.3.0)
+
+The kit can bring the **XDNA2 NPU** (Ryzen AI MAX+ 395 series, `PCI\VEN_1022&DEV_17F0`) into the serving stack as a **third accelerator** — running its own model next to the Ollama-controlled iGPU/dGPU pair.
+
+### Why Ollama can't touch the NPU (verified)
+
+- Ollama's runner loads only `ggml-hip.dll` + `ggml-vulkan.dll` — no NPU backend exists in llama.cpp.
+- HIP SDK exposes only `gfx*` targets; XDNA is a separate stack (`kipudrv` driver + FastFlowLM / onnxruntime-genai), invisible to HIP API code.
+- No env switch or config makes an Ollama model run on the NPU — and no runtime today supports a single-model NPU+GPU layer split.
+
+### Setup
+
+```powershell
+.\install-npu-lemonade.ps1                          # detect NPU + install Lemonade + FLM backend
+.\install-npu-lemonade.ps1 -Model qwen3-0.6b-FLM    # also pull the first NPU model (~0.66 GB)
+.\validate-npu.ps1                                  # benchmark through the running server
+```
+
+`install-npu-lemonade.ps1` requires the NPU driver ≥ `32.0.203.280` (any recent Adrenalin includes it); it verifies `flm validate` and confirms `amd_npu: available, family XDNA2` on the server at `http://127.0.0.1:13305`. It never touches the HIP SDK, TheRock venv, or Ollama.
+
+### Verified performance (Strix Halo, Lemonade 2026.39.1 + FastFlowLM 1.0.5)
+
+| Metric | Value (`qwen3-0.6b-FLM`, q4nx) |
+|---|---|
+| NPU decode | **~85 tok/s** (85.09–87.1 across 4 runs) |
+| NPU prefill (TTFT) | ~0.48 s @ ~56 tok/s |
+| End-to-end | ~71–75 tok/s incl. network + JSON |
+
+### Constraints (verified)
+
+- NPU exclusivity: `flm` holds at most 1 LLM + 1 ASR + 1 embedding model simultaneously; `ryzenai-llm` holds exactly 1 LLM; the two backends evict each other.
+- Only NPU-quantized `*-FLM` checkpoints run on the NPU (stored in `C:\Users\<user>\.flm\models\`).
+- Lemonade and Ollama coexist on different ports (13305 vs 11434) and don't fight over devices — Lemonade's NPU recipes are invisible to Ollama's HIP/Vulkan backends and vice versa.
+
+### Recommendation (updated)
 
 | Workload | Best approach |
 |---|---|
 | Single large model (≤ 87 GB) | Use iGPU alone (87 GB VRAM fits most models) |
 | Multiple users / models | Option 1: two models, two GPUs (`configure-ollama-dual-gpu.ps1`) |
 | Model too large for iGPU alone | Reduce context size (`OLLAMA_CONTEXT_LENGTH=32768`) or use Q4 quantization |
+| Third concurrent small model / low-power serving | NPU via `install-npu-lemonade.ps1` + `validate-npu.ps1` (~85 tok/s on 0.6B) |
 
 **Do not reduce iGPU VRAM to add more system RAM.** The iGPU's 87 GB unified memory is the single biggest advantage of this box. CPU overflow is 10-50x slower than GPU. The NPU (XDNA) is not used by Ollama/llama.cpp.
 
@@ -262,7 +297,9 @@ C:\therock\rocm-dual-gpu-kit\
 ├── test-peer-vram.ps1              <- v1.2.0: compile + run peer_vram_test
 ├── configure-ollama-dual-gpu.ps1   <- v1.2.0: Ollama dual-GPU config + tray restart
 ├── start-dual-gpu-ollama.ps1       <- v1.2.0: standalone Ollama launcher (superseded)
-└── start-split-model.ps1           <- v1.2.0: forced layer split attempt (limited)
+├── start-split-model.ps1           <- v1.2.0: forced layer split attempt (limited)
+├── install-npu-lemonade.ps1        <- v1.3.0: XDNA2 NPU bring-up (Lemonade + FastFlowLM)
+└── validate-npu.ps1                <- v1.3.0: NPU benchmark via running server
 ```
 
 ## License & Copyright

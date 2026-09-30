@@ -62,7 +62,10 @@ User wants dual-GPU ROCm setup
     │      before committing to the install. Read-only: it never mutates registry, drivers, or env.
     │      Suggested next block in the output points to the most relevant kit command.
     │
-    └── 8. If anything fails, see [README.md "Known issues" section](README.md).
+    ├── 8. Run install-npu-lemonade.ps1 (optional, v1.3.0) — brings the XDNA2 NPU into
+    │      the serving stack via Lemonade + FastFlowLM; then run validate-npu.ps1.
+    │
+    └── 9. If anything fails, see [README.md "Known issues" section](README.md).
 ```
 
 ## Per-hardware adaptation
@@ -171,6 +174,53 @@ Revert: `.\configure-ollama-dual-gpu.ps1 -Revert`
 | Model too large for iGPU alone | Reduce context size or use Q4 quantization |
 
 **Do not reduce iGPU VRAM to add more system RAM.** The iGPU's 87 GB unified memory is the single biggest advantage of this box. CPU overflow is 10-50x slower than GPU. The NPU (XDNA) is not used by Ollama/llama.cpp.
+
+## NPU acceleration via Lemonade (v1.3.0)
+
+The kit can bring the **XDNA2 NPU** (Ryzen AI MAX+ 395, `PCI\VEN_1022&DEV_17F0`) into the serving stack as a third accelerator — next to the Ollama-controlled iGPU/dGPU pair.
+
+### Why Ollama can't touch the NPU (verified)
+
+- Ollama 0.35.0's runner loads only `ggml-hip.dll` + `ggml-vulkan.dll`. There is no `ggml-xdna.dll` — llama.cpp has no merged NPU backend.
+- HIP SDK exposes only `gfx*` targets through `gcnArchName`; XDNA is a separate stack (`kipudrv` driver + onnxruntime-genai / FastFlowLM), invisible to HIP API code.
+- Conclusion: no env switch or config makes an Ollama model partially run on the NPU. The NPU needs its own runtime — that is what Lemonade provides.
+
+### What `install-npu-lemonade.ps1` does
+
+1. Detect NPU device (`VEN_1022&DEV_17F0`) + driver (class `ComputeAccelerator`); require ≥ `32.0.203.280` (RyzenAI 1.6.0 floor).
+2. Install Lemonade Server (silent MSI → `%LOCALAPPDATA%\lemonade_server\bin`, server on `http://127.0.0.1:13305`).
+3. Install FastFlowLM backend (`lemonade backends install flm:npu`; binary lands in `~\.cache\lemonade\bin\flm\npu\flm.exe`).
+4. Run `flm validate` — green `XDNA2` + driver line means the stack is good.
+5. Ensure `LemonadeServer.exe serve` is running and `GET /api/v1/system-info` reports `amd_npu: available, family XDNA2`.
+6. Optional: `-Model qwen3-0.6b-FLM` pulls the model (~0.66 GB).
+
+### What `validate-npu.ps1` does
+
+Benchmarks the NPU through the running server. Verified on Strix Halo 2026-09-30:
+
+| Metric | Value (`qwen3-0.6b-FLM`, q4nx) |
+|---|---|
+| NPU decode | **~85 tok/s** (85.09–85.15 across 3 runs) |
+| NPU prefill (TTFT) | ~0.48 s @ ~56 tok/s |
+| End-to-end | ~71–75 tok/s incl. network + JSON |
+
+Verdict line `NPU DECODE: <tok/s>`; exit 0 when ≥ 10 tok/s.
+
+### Verified constraints (Strix Halo + RX 7600 XT, Lemonade 2026.39.1 + FLM 1.0.5)
+
+- **NPU is exclusive per backend type**: `flm` holds max 1 LLM + 1 ASR + 1 embedding simultaneously; `ryzenai-llm` holds exactly 1 LLM; the two backends evict each other.
+- NPU-quantized models are `*-FLM` checkpoints (e.g. `qwen3-0.6b-FLM`, stored in `C:\Users\<user>\.flm\models\`).
+- Lemonade and Ollama can run side by side on different ports (Lemonade `13305`, Ollama `11434`); they don't fight over devices because Lemonade routes NPU↔FLM, and Ollama's models stay on iGPU/dGPU.
+- Single-model **NPU+GPU layer split is still impossible** — that limitation is architectural (see Ollama section) and Lemonade NPU recipes do not layer-split either.
+
+### Recommendation (updated)
+
+| Workload | Best approach |
+|---|---|
+| Single large model (≤ 87 GB) | Use iGPU alone (87 GB VRAM fits most models) |
+| Multiple users / models | Option 1: two models, two GPUs (`configure-ollama-dual-gpu.ps1`) |
+| Model too large for iGPU alone | Reduce context size or use Q4 quantization |
+| Third concurrent small model / low-power serving | NPU via `install-npu-lemonade.ps1` + `validate-npu.ps1` (85 tok/s on 0.6B) |
 
 ## Related skills
 

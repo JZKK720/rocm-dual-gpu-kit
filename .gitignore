@@ -9,3 +9,8 @@ diagnose-connection.detour.log
 dgpu-probe.log
 validate.log
 detect.env
+
+# Local-only working artifacts
+.vscode/
+audit/
+*.log
