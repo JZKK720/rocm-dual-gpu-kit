@@ -68,6 +68,10 @@ $env:OLLAMA_KEEP_ALIVE = "30m"
 $env:OLLAMA_HOST = "0.0.0.0:11434"
 # Enable iGPU (the 87 GB Strix Halo iGPU is our workhorse)
 $env:OLLAMA_IGPU_ENABLE = "1"
+# Enable high-performance Flash Attention
+$env:OLLAMA_FLASH_ATTENTION = "1"
+# Quantize KV cache to save up to 12 GB memory
+$env:OLLAMA_KV_CACHE_TYPE = "q8_0"
 # Let Ollama see both GPUs
 $env:HIP_VISIBLE_DEVICES = "0,1"
 $env:ROCR_VISIBLE_DEVICES = "0,1"
@@ -78,6 +82,8 @@ $env:ROCR_VISIBLE_DEVICES = "0,1"
 "  OLLAMA_NUM_PARALLEL      = $env:OLLAMA_NUM_PARALLEL  (1 request per model)" | Write-Host
 "  OLLAMA_KEEP_ALIVE        = $env:OLLAMA_KEEP_ALIVE  (30 min)" | Write-Host
 "  OLLAMA_IGPU_ENABLE       = $env:OLLAMA_IGPU_ENABLE  (iGPU enabled)" | Write-Host
+"  OLLAMA_FLASH_ATTENTION   = $env:OLLAMA_FLASH_ATTENTION  (Flash Attention enabled)" | Write-Host
+"  OLLAMA_KV_CACHE_TYPE     = $env:OLLAMA_KV_CACHE_TYPE  (KV Cache quantized to q8_0)" | Write-Host
 "  HIP_VISIBLE_DEVICES      = $env:HIP_VISIBLE_DEVICES  (both GPUs)" | Write-Host
 "" | Write-Host
 "  GPU 0 (iGPU): AMD Radeon 8060S Graphics  — 87.9 GB VRAM" | Write-Host

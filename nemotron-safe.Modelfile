@@ -1,0 +1,5 @@
+FROM nemotron-3.5-lightning:30b-a3b
+# Restrict context window to fit comfortably within physical memory bounds
+PARAMETER num_ctx 8192
+PARAMETER num_predict 2048
+PARAMETER temperature 0

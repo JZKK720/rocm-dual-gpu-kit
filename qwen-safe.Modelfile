@@ -1,0 +1,5 @@
+FROM qwen3.8-flash-next:125b-a6b-q4_K_M
+# Restrict context window to fit robustly with MoE activation footprint
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1024
+PARAMETER temperature 0

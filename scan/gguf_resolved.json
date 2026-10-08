@@ -1,0 +1,23 @@
+{
+  "general.architecture": "qwen4exp",
+  "general.name": "Qwen3.8 Flash Next",
+  "general.size_label": "512x56B",
+  "qwen4exp.block_count": 48,
+  "qwen4exp.context_length": 262144,
+  "qwen4exp.embedding_length": 2560,
+  "qwen4exp.attention.head_count": 24,
+  "qwen4exp.attention.head_count_kv": 2,
+  "qwen4exp.attention.key_length": 256,
+  "qwen4exp.attention.value_length": 256,
+  "qwen4exp.rope.freq_base": 10000000.0,
+  "qwen4exp.expert_count": 512,
+  "qwen4exp.expert_used_count": 10,
+  "qwen4exp.expert_feed_forward_length": 640,
+  "qwen4exp.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+  "qwen4exp.ssm.state_size": 128,
+  "qwen4exp.ssm.conv_kernel": 4,
+  "qwen4exp.ssm.inner_size": 6144,
+  "qwen4exp.ssm.group_count": 16,
+  "qwen4exp.ssm.time_step_rank": 48,
+  "qwen4exp.full_attention_interval": 4
+}

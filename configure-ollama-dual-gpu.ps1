@@ -74,6 +74,8 @@ $envVars = @{
     "OLLAMA_NUM_PARALLEL"      = "1"      # 1 request per model (each on its own GPU)
     "OLLAMA_KEEP_ALIVE"        = "30m"    # Keep models loaded for 30 min
     "OLLAMA_IGPU_ENABLE"       = "1"      # Enable iGPU (Strix Halo 87 GB)
+    "OLLAMA_FLASH_ATTENTION"   = "1"      # Enable high-performance Flash Attention
+    "OLLAMA_KV_CACHE_TYPE"     = "q8_0"    # Quantize KV cache to save up to 12 GB memory
     "HIP_VISIBLE_DEVICES"      = "0,1"    # Both GPUs visible to HIP
     "ROCR_VISIBLE_DEVICES"     = "0,1"    # Both GPUs visible to ROCR
 }
