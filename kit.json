@@ -1,6 +1,6 @@
 {
   "kit_name": "rocm-dual-gpu-kit",
-  "kit_version": "1.3.0",
+  "kit_version": "1.4.0",
   "developed_on": "2026-06-09",
   "copyright": "Copyright 2026 cubecloud Limited (https://cubecloud.io)",
   "license": "Apache-2.0",
@@ -36,9 +36,25 @@
     "configure_ollama_dual_gpu": "configure-ollama-dual-gpu.ps1",
     "start_split_model": "start-split-model.ps1",
     "install_npu": "install-npu-lemonade.ps1",
-    "validate_npu": "validate-npu.ps1"
+    "validate_npu": "validate-npu.ps1",
+    "bench_strata": "scan/bench-strata.ps1",
+    "bench_ollama": "scan/bench-ollama.ps1",
+    "quality_compare": "scan/quality-compare.ps1"
   },
   "changelog": [
+    {
+      "version": "1.4.0",
+      "date": "2026-10-08",
+      "additive": true,
+      "highlights": [
+        "New scan/ benchmark harness: bench-strata.ps1 (A/B context-ladder benchmark for Strata engine), bench-ollama.ps1, bench-ctx.ps1, quality-compare.ps1 (model quality A/B), VRAM/memory probes, GGUF metadata tools (gguf_meta.py, gguf_tensors.py), and spread/split experiments. Benchmark result directories are gitignored.",
+        "scan/FINDINGS.md + scan/STRATA-RESEARCH.md: verified findings from the Strix Halo + RX 7900 XTX evaluation campaign (Strata IQ2_XS 78-91 tok/s decode on dGPU, long-context ladder to 131K, VRAM hardening, iGPU/dGPU split constraints on Windows).",
+        "New qwen-safe.Modelfile / nemotron-safe.Modelfile: safe-parameter model recipes for dual-GPU serving.",
+        "New setup-safeguard-profiles.ps1 and patch-readme.ps1: setup and documentation tooling.",
+        "configure-ollama-dual-gpu.ps1 / start-dual-gpu-ollama.ps1: enable OLLAMA_FLASH_ATTENTION=1 and OLLAMA_KV_CACHE_TYPE=q8_0 for memory-efficient KV cache.",
+        "README restructure: README.md is now the plain-language front page; full technical guide moved to TECHNICAL.md (with v1.3.0 NPU section merged in)."
+      ]
+    },
     {
       "version": "1.3.0",
       "date": "2026-09-30",
